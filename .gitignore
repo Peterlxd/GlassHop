@@ -1,0 +1,9 @@
+.DS_Store
+work/
+outputs/
+DerivedData/
+*.ipa
+*.dmg
+*.zip
+xcuserdata/
+*.xcuserstate
