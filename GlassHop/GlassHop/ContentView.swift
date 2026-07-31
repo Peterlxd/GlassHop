@@ -11,16 +11,22 @@ struct ContentView: View {
                 JumpSceneView(game: game)
                     .frame(width: proxy.size.width, height: proxy.size.height)
 
-                VStack(spacing: 0) {
-                    header
-                    Spacer()
-                    instruction
+                if !game.isWelcomePresented {
+                    VStack(spacing: 0) {
+                        header
+                        Spacer()
+                        instruction
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+                    .padding(.bottom, 28)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
-                .padding(.bottom, 28)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
+
+            if game.isWelcomePresented {
+                welcomeOverlay
+            }
         }
         .ignoresSafeArea()
         .overlay {
@@ -52,6 +58,42 @@ struct ContentView: View {
             .buttonStyle(GlassIconButtonStyle())
             .accessibilityLabel("重新开始")
         }
+    }
+
+    private var welcomeOverlay: some View {
+        VStack(spacing: 0) {
+            Spacer()
+                .frame(height: 94)
+
+            Text("GLASS HOP")
+                .font(.system(size: 40, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.94))
+
+            Text("FLOAT INTO THE NEXT MOVE")
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .tracking(1.4)
+                .foregroundStyle(.white.opacity(0.52))
+                .padding(.top, 8)
+
+            Spacer()
+
+            Button {
+                game.start()
+            } label: {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 68, height: 68)
+            }
+            .buttonStyle(WelcomePlayButtonStyle())
+            .accessibilityLabel("开始游戏")
+
+            Spacer()
+                .frame(height: 92)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.opacity(0.28))
+        .transition(.opacity)
     }
 
     private var instruction: some View {
@@ -157,11 +199,25 @@ private struct GlassPrimaryButtonStyle: ButtonStyle {
     }
 }
 
+private struct WelcomePlayButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Circle()
+            .fill(.ultraThinMaterial)
+            .overlay(Circle().strokeBorder(.white.opacity(0.42), lineWidth: 0.8))
+            .overlay(configuration.label)
+            .frame(width: 68, height: 68)
+            .shadow(color: .black.opacity(0.30), radius: 18, y: 8)
+            .scaleEffect(configuration.isPressed ? 0.90 : 1)
+            .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
+    }
+}
+
 @MainActor
 final class GameViewModel: ObservableObject {
     @Published private(set) var score = 0
     @Published private(set) var charge: CGFloat = 0
     @Published private(set) var state: GameState = .ready
+    @Published private(set) var isWelcomePresented = true
     let engine = JumpGameEngine()
 
     init() {
@@ -178,6 +234,11 @@ final class GameViewModel: ObservableObject {
 
     func restart() {
         engine.restart()
+    }
+
+    func start() {
+        isWelcomePresented = false
+        engine.restart(playsFeedback: false)
     }
 }
 

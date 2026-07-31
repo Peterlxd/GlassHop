@@ -6,6 +6,8 @@ struct GlassHopApp: App {
         WindowGroup {
             ContentView()
                 .preferredColorScheme(.dark)
+                .statusBar(hidden: true)
+                .ignoresSafeArea()
         }
     }
 }

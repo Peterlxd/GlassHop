@@ -1,6 +1,7 @@
 import SceneKit
 import SwiftUI
 import UIKit
+import AVFoundation
 
 struct JumpSceneView: UIViewRepresentable {
     @ObservedObject var game: GameViewModel
@@ -68,10 +69,10 @@ final class JumpGameEngine: NSObject, SCNSceneRendererDelegate {
     private var isConfigured = false
 
     private let platformColors = [
-        UIColor(red: 0.16, green: 0.77, blue: 0.82, alpha: 1),
-        UIColor(red: 0.95, green: 0.34, blue: 0.54, alpha: 1),
-        UIColor(red: 0.98, green: 0.67, blue: 0.22, alpha: 1),
-        UIColor(red: 0.42, green: 0.50, blue: 0.98, alpha: 1)
+        UIColor(red: 0.06, green: 0.25, blue: 0.28, alpha: 1),
+        UIColor(red: 0.30, green: 0.08, blue: 0.16, alpha: 1),
+        UIColor(red: 0.28, green: 0.17, blue: 0.06, alpha: 1),
+        UIColor(red: 0.12, green: 0.14, blue: 0.32, alpha: 1)
     ]
 
     func attach(to view: JumpSCNView) {
@@ -79,10 +80,10 @@ final class JumpGameEngine: NSObject, SCNSceneRendererDelegate {
         configureScene()
         view.scene = scene
         view.delegate = self
-        restart()
+        restart(playsFeedback: false)
     }
 
-    func restart() {
+    func restart(playsFeedback: Bool = true) {
         guard isConfigured else { return }
         world.childNodes.forEach { $0.removeFromParentNode() }
         platforms.removeAll()
@@ -98,6 +99,9 @@ final class JumpGameEngine: NSObject, SCNSceneRendererDelegate {
         world.addChildNode(player)
         target = first
         moveCamera(toward: start.position, animated: false)
+        if playsFeedback {
+            GameFeedback.shared.restarted()
+        }
         publish(force: true)
     }
 
@@ -105,6 +109,7 @@ final class JumpGameEngine: NSObject, SCNSceneRendererDelegate {
         guard state == .ready else { return }
         state = .charging
         chargeStartedAt = CACurrentMediaTime()
+        GameFeedback.shared.chargeStarted()
         publish(force: true)
     }
 
@@ -124,6 +129,7 @@ final class JumpGameEngine: NSObject, SCNSceneRendererDelegate {
         )
         jumpDuration = 0.48 + TimeInterval(charge) * 0.34
         player.launch(direction: direction)
+        GameFeedback.shared.launched()
         publish(force: true)
     }
 
@@ -145,15 +151,15 @@ final class JumpGameEngine: NSObject, SCNSceneRendererDelegate {
         isConfigured = true
         scene.rootNode.addChildNode(world)
         scene.rootNode.addChildNode(cameraFocus)
-        scene.background.contents = UIColor(red: 0.025, green: 0.045, blue: 0.075, alpha: 1)
-        scene.fogColor = UIColor(red: 0.025, green: 0.045, blue: 0.075, alpha: 1)
+        scene.background.contents = UIColor(red: 0.018, green: 0.028, blue: 0.040, alpha: 1)
+        scene.fogColor = UIColor(red: 0.018, green: 0.028, blue: 0.040, alpha: 1)
         scene.fogStartDistance = 14
         scene.fogEndDistance = 34
 
         let floor = SCNFloor()
         floor.reflectivity = 0.18
-        floor.firstMaterial?.diffuse.contents = UIColor(red: 0.04, green: 0.08, blue: 0.13, alpha: 1)
-        floor.firstMaterial?.roughness.contents = 0.78
+        floor.firstMaterial?.diffuse.contents = UIColor(red: 0.025, green: 0.045, blue: 0.060, alpha: 1)
+        floor.firstMaterial?.roughness.contents = 0.90
         let floorNode = SCNNode(geometry: floor)
         floorNode.position.y = -0.30
         scene.rootNode.addChildNode(floorNode)
@@ -161,15 +167,15 @@ final class JumpGameEngine: NSObject, SCNSceneRendererDelegate {
         let ambient = SCNNode()
         ambient.light = SCNLight()
         ambient.light?.type = .ambient
-        ambient.light?.color = UIColor(red: 0.42, green: 0.55, blue: 0.76, alpha: 1)
-        ambient.light?.intensity = 520
+        ambient.light?.color = UIColor(red: 0.32, green: 0.39, blue: 0.48, alpha: 1)
+        ambient.light?.intensity = 150
         scene.rootNode.addChildNode(ambient)
 
         let key = SCNNode()
         key.light = SCNLight()
         key.light?.type = .omni
         key.light?.color = UIColor(red: 0.74, green: 0.94, blue: 1, alpha: 1)
-        key.light?.intensity = 1_400
+        key.light?.intensity = 520
         key.light?.castsShadow = true
         key.light?.shadowRadius = 10
         key.position = SCNVector3(-3, 8, 5)
@@ -178,16 +184,16 @@ final class JumpGameEngine: NSObject, SCNSceneRendererDelegate {
         let rim = SCNNode()
         rim.light = SCNLight()
         rim.light?.type = .directional
-        rim.light?.color = UIColor(red: 0.86, green: 0.30, blue: 0.58, alpha: 1)
-        rim.light?.intensity = 620
+        rim.light?.color = UIColor(red: 0.45, green: 0.27, blue: 0.38, alpha: 1)
+        rim.light?.intensity = 160
         rim.eulerAngles = SCNVector3(-0.9, -0.6, 0)
         scene.rootNode.addChildNode(rim)
 
         let camera = SCNCamera()
         camera.wantsHDR = true
-        camera.bloomIntensity = 0.32
-        camera.bloomBlurRadius = 7
-        camera.bloomThreshold = 0.72
+        camera.bloomIntensity = 0.05
+        camera.bloomBlurRadius = 4
+        camera.bloomThreshold = 0.95
         camera.zFar = 70
         cameraNode.camera = camera
         let lookAt = SCNLookAtConstraint(target: cameraFocus)
@@ -216,8 +222,10 @@ final class JumpGameEngine: NSObject, SCNSceneRendererDelegate {
         let landed = distance <= min(target.width, target.length) * 0.43
 
         if landed {
-            score += distance < 0.28 ? 2 : 1
+            let perfect = distance < 0.28
+            score += perfect ? 2 : 1
             player.land()
+            GameFeedback.shared.landed(perfect: perfect)
             let next = makeNextPlatform(from: target)
             self.target = next
             state = .ready
@@ -227,6 +235,7 @@ final class JumpGameEngine: NSObject, SCNSceneRendererDelegate {
             state = .gameOver
             let direction = normalized(horizontalVector(from: target.position, to: player.position))
             player.fall(direction: direction)
+            GameFeedback.shared.fell()
             publish(force: true)
         }
     }
@@ -317,9 +326,9 @@ private final class GlassPlatformNode: SCNNode {
         let base = SCNBox(width: CGFloat(width), height: CGFloat(height), length: CGFloat(length), chamferRadius: 0.18)
         let material = SCNMaterial()
         material.lightingModel = .physicallyBased
-        material.diffuse.contents = tint.withAlphaComponent(0.88)
-        material.metalness.contents = 0.22
-        material.roughness.contents = 0.18
+        material.diffuse.contents = tint.withAlphaComponent(0.62)
+        material.metalness.contents = 0.05
+        material.roughness.contents = 0.52
         material.fresnelExponent = 1.25
         base.materials = [material]
         addChildNode(SCNNode(geometry: base))
@@ -327,8 +336,8 @@ private final class GlassPlatformNode: SCNNode {
         let cap = SCNBox(width: CGFloat(width * 0.82), height: 0.025, length: CGFloat(length * 0.82), chamferRadius: 0.12)
         let capMaterial = SCNMaterial()
         capMaterial.lightingModel = .constant
-        capMaterial.diffuse.contents = UIColor.white.withAlphaComponent(0.48)
-        capMaterial.transparency = 0.56
+        capMaterial.diffuse.contents = UIColor.white.withAlphaComponent(0.06)
+        capMaterial.transparency = 0.14
         cap.materials = [capMaterial]
         let capNode = SCNNode(geometry: cap)
         capNode.position.y = height / 2 + 0.014
@@ -397,5 +406,111 @@ private final class GlassPlayerNode: SCNNode {
         move.timingMode = .easeIn
         let spin = SCNAction.rotateBy(x: 2.0, y: 1.2, z: 1.4, duration: 0.58)
         runAction(.group([move, spin, .fadeOut(duration: 0.58)]))
+    }
+}
+
+private final class GameFeedback {
+    static let shared = GameFeedback()
+
+    private let audioEngine = AVAudioEngine()
+    private let audioPlayer = AVAudioPlayerNode()
+    private let audioFormat = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
+    private let lightImpact = UIImpactFeedbackGenerator(style: .light)
+    private let mediumImpact = UIImpactFeedbackGenerator(style: .medium)
+    private let heavyImpact = UIImpactFeedbackGenerator(style: .heavy)
+    private let notificationImpact = UINotificationFeedbackGenerator()
+
+    private init() {
+        audioEngine.attach(audioPlayer)
+        audioEngine.connect(audioPlayer, to: audioEngine.mainMixerNode, format: audioFormat)
+    }
+
+    func chargeStarted() {
+        perform { feedback in
+            feedback.lightImpact.impactOccurred(intensity: 0.45)
+            feedback.playTone(from: 180, to: 230, duration: 0.06, volume: 0.10)
+            feedback.prepare()
+        }
+    }
+
+    func launched() {
+        perform { feedback in
+            feedback.mediumImpact.impactOccurred(intensity: 0.72)
+            feedback.playTone(from: 260, to: 620, duration: 0.13, volume: 0.16)
+        }
+    }
+
+    func landed(perfect: Bool) {
+        perform { feedback in
+            if perfect {
+                feedback.heavyImpact.impactOccurred(intensity: 0.92)
+                feedback.notificationImpact.notificationOccurred(.success)
+                feedback.playTone(from: 720, to: 1_080, duration: 0.17, volume: 0.20)
+            } else {
+                feedback.mediumImpact.impactOccurred(intensity: 0.65)
+                feedback.playTone(from: 420, to: 610, duration: 0.11, volume: 0.14)
+            }
+            feedback.prepare()
+        }
+    }
+
+    func fell() {
+        perform { feedback in
+            feedback.notificationImpact.notificationOccurred(.error)
+            feedback.playTone(from: 240, to: 85, duration: 0.28, volume: 0.18)
+        }
+    }
+
+    func restarted() {
+        perform { feedback in
+            feedback.lightImpact.impactOccurred(intensity: 0.35)
+            feedback.playTone(from: 440, to: 620, duration: 0.08, volume: 0.09)
+            feedback.prepare()
+        }
+    }
+
+    private func perform(_ block: @escaping (GameFeedback) -> Void) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            block(self)
+        }
+    }
+
+    private func prepare() {
+        lightImpact.prepare()
+        mediumImpact.prepare()
+        heavyImpact.prepare()
+        notificationImpact.prepare()
+    }
+
+    private func playTone(from startFrequency: Double, to endFrequency: Double, duration: Double, volume: Float) {
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.ambient, options: [.mixWithOthers])
+            try AVAudioSession.sharedInstance().setActive(true)
+            if !audioEngine.isRunning {
+                try audioEngine.start()
+            }
+        } catch {
+            return
+        }
+
+        let frameCount = AVAudioFrameCount(max(1, Int(audioFormat.sampleRate * duration)))
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: audioFormat, frameCapacity: frameCount) else { return }
+        buffer.frameLength = frameCount
+        guard let samples = buffer.floatChannelData?.pointee else { return }
+
+        var phase = 0.0
+        for index in 0..<Int(frameCount) {
+            let progress = Double(index) / Double(frameCount)
+            let frequency = startFrequency + (endFrequency - startFrequency) * progress
+            phase += 2 * Double.pi * frequency / audioFormat.sampleRate
+            let envelope = pow(1 - progress, 1.8)
+            samples[index] = Float(sin(phase) * envelope) * volume
+        }
+
+        audioPlayer.scheduleBuffer(buffer, at: nil, options: .interrupts)
+        if !audioPlayer.isPlaying {
+            audioPlayer.play()
+        }
     }
 }
