@@ -96,54 +96,56 @@ struct ContentView: View {
         .transition(.opacity)
     }
 
+    @ViewBuilder
     private var instruction: some View {
-        LiquidGlassSurface {
-            Group {
-                if game.state == .ready {
-                    Text("按住屏幕蓄力，松开起跳")
-                } else if game.state == .charging {
-                    Text("蓄力 \(Int(game.charge * 100))%")
-                        .monospacedDigit()
-                } else {
-                    Text(" ")
+        if game.state == .ready || game.state == .charging {
+            LiquidGlassSurface {
+                Group {
+                    if game.state == .ready {
+                        Text("按住屏幕蓄力，松开起跳")
+                    } else {
+                        Text("蓄力 \(Int(game.charge * 100))%")
+                            .monospacedDigit()
+                    }
                 }
+                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.92))
+                .frame(minWidth: 176, minHeight: 42)
+                .padding(.horizontal, 16)
             }
-            .font(.system(size: 15, weight: .medium, design: .rounded))
-            .foregroundStyle(.white.opacity(0.92))
-            .frame(minWidth: 176, minHeight: 42)
-            .padding(.horizontal, 16)
+            .animation(.easeInOut(duration: 0.15), value: game.state)
         }
-        .animation(.easeInOut(duration: 0.15), value: game.state)
     }
 
     private var gameOverOverlay: some View {
         ZStack {
-            Color.black.opacity(0.22).ignoresSafeArea()
-            LiquidGlassSurface {
-                VStack(spacing: 16) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 28, weight: .medium))
-                        .foregroundStyle(.white)
-                    Text("本次得分")
-                        .font(.system(size: 15, weight: .medium, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.68))
-                    Text("\(game.score)")
-                        .font(.system(size: 64, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                    Button {
-                        game.restart()
-                    } label: {
-                        Label("再来一次", systemImage: "arrow.clockwise")
-                            .font(.system(size: 17, weight: .semibold, design: .rounded))
-                            .frame(maxWidth: .infinity, minHeight: 52)
-                    }
-                    .buttonStyle(GlassPrimaryButtonStyle())
+            Color.black.opacity(0.30).ignoresSafeArea()
+            VStack(spacing: 14) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 24, weight: .medium))
+                    .foregroundStyle(.white)
+                Text("本次得分")
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.68))
+                Text("\(game.score)")
+                    .font(.system(size: 58, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .padding(.bottom, 4)
+                Button {
+                    game.restart()
+                } label: {
+                    Label("再来一次", systemImage: "arrow.clockwise")
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .frame(maxWidth: .infinity, minHeight: 50)
                 }
-                .foregroundStyle(.white)
-                .frame(width: 260)
-                .padding(26)
+                .buttonStyle(GlassPrimaryButtonStyle())
             }
-            .shadow(color: .black.opacity(0.30), radius: 24, y: 12)
+            .foregroundStyle(.white)
+            .frame(width: 272)
+            .padding(24)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(.white.opacity(0.22), lineWidth: 0.8))
+            .shadow(color: .black.opacity(0.34), radius: 28, y: 14)
         }
         .transition(.opacity.combined(with: .scale(scale: 0.94)))
     }
