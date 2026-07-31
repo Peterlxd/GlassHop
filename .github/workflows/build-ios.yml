@@ -1,0 +1,41 @@
+name: Build iOS 26 Game
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show selected Xcode
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+      - name: Require iOS 26 SDK
+        run: |
+          SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
+          [[ "$SDK_VERSION" == 26.* ]] || { echo "iOS 26 SDK is required; found $SDK_VERSION"; exit 1; }
+      - name: Build unsigned iOS 26 device app
+        run: |
+          xcodebuild \
+            -project GlassHop/GlassHop.xcodeproj \
+            -scheme GlassHop \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/GlassHopDerivedData" \
+            IPHONEOS_DEPLOYMENT_TARGET=26.0 \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+      - name: Package IPA
+        run: |
+          mkdir -p Payload
+          ditto "$RUNNER_TEMP/GlassHopDerivedData/Build/Products/Release-iphoneos/GlassHop.app" Payload/GlassHop.app
+          zip -qry GlassHop-iOS26-LiquidGlass-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GlassHop-iOS26-LiquidGlass-unsigned
+          path: GlassHop-iOS26-LiquidGlass-unsigned.ipa
