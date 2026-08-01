@@ -66,6 +66,9 @@ final class JumpGameEngine: NSObject, SCNSceneRendererDelegate {
     private var jumpOrigin = SCNVector3Zero
     private var jumpDestination = SCNVector3Zero
     private var lastPublishedCharge: CGFloat = -1
+    private var lastFrameTime: TimeInterval = 0
+    private var cameraFocusGoal = SCNVector3Zero
+    private var cameraPositionGoal = SCNVector3Zero
     private var isConfigured = false
 
     private let platformColors = [
@@ -98,6 +101,7 @@ final class JumpGameEngine: NSObject, SCNSceneRendererDelegate {
         player.position = SCNVector3(start.position.x, start.topY + player.radius, start.position.z)
         world.addChildNode(player)
         target = first
+        lastFrameTime = 0
         moveCamera(toward: start.position, animated: false)
         if playsFeedback {
             GameFeedback.shared.restarted()
@@ -134,6 +138,14 @@ final class JumpGameEngine: NSObject, SCNSceneRendererDelegate {
     }
 
     func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
+        let deltaTime: TimeInterval
+        if lastFrameTime > 0 {
+            deltaTime = min(max(time - lastFrameTime, 1 / 120), 1 / 24)
+        } else {
+            deltaTime = 1 / 60
+        }
+        lastFrameTime = time
+
         switch state {
         case .charging:
             charge = min(1, CGFloat((time - chargeStartedAt) / 1.15))
@@ -144,6 +156,8 @@ final class JumpGameEngine: NSObject, SCNSceneRendererDelegate {
         default:
             break
         }
+
+        smoothCamera(deltaTime: deltaTime)
     }
 
     private func configureScene() {
@@ -210,7 +224,14 @@ final class JumpGameEngine: NSObject, SCNSceneRendererDelegate {
             lerp(jumpOrigin.y, jumpDestination.y, progress) + sin(Float(progress) * .pi) * apex,
             lerp(jumpOrigin.z, jumpDestination.z, progress)
         )
-        moveCamera(toward: player.position, animated: false)
+
+        let cameraProgress = progress * progress * (3 - 2 * progress)
+        let cameraPoint = SCNVector3(
+            lerp(jumpOrigin.x, jumpDestination.x, cameraProgress),
+            0,
+            lerp(jumpOrigin.z, jumpDestination.z, cameraProgress)
+        )
+        moveCamera(toward: cameraPoint, animated: true)
 
         guard progress >= 1 else { return }
         resolveLanding()
@@ -266,20 +287,28 @@ final class JumpGameEngine: NSObject, SCNSceneRendererDelegate {
     }
 
     private func moveCamera(toward point: SCNVector3, animated: Bool) {
-        let target = SCNVector3(point.x, 0, point.z - 1.35)
-        let apply = {
-            self.cameraFocus.position = target
-            self.cameraNode.position = SCNVector3(target.x, 8.8, target.z + 10.8)
+        cameraFocusGoal = SCNVector3(point.x, 0, point.z - 1.35)
+        cameraPositionGoal = SCNVector3(cameraFocusGoal.x, 8.8, cameraFocusGoal.z + 10.8)
+
+        if !animated {
+            cameraFocus.position = cameraFocusGoal
+            cameraNode.position = cameraPositionGoal
         }
-        guard animated else {
-            apply()
-            return
-        }
-        SCNTransaction.begin()
-        SCNTransaction.animationDuration = 0.34
-        SCNTransaction.animationTimingFunction = CAMediaTimingFunction(name: .easeOut)
-        apply()
-        SCNTransaction.commit()
+    }
+
+    private func smoothCamera(deltaTime: TimeInterval) {
+        let followSpeed: Float = state == .jumping ? 8.5 : 6.2
+        let alpha = 1 - exp(-followSpeed * Float(deltaTime))
+        cameraFocus.position = smoothVector(cameraFocus.position, cameraFocusGoal, alpha: alpha)
+        cameraNode.position = smoothVector(cameraNode.position, cameraPositionGoal, alpha: alpha)
+    }
+
+    private func smoothVector(_ current: SCNVector3, _ target: SCNVector3, alpha: Float) -> SCNVector3 {
+        SCNVector3(
+            current.x + (target.x - current.x) * alpha,
+            current.y + (target.y - current.y) * alpha,
+            current.z + (target.z - current.z) * alpha
+        )
     }
 
     private func publish(force: Bool = false) {
@@ -315,7 +344,7 @@ final class JumpGameEngine: NSObject, SCNSceneRendererDelegate {
 private final class GlassPlatformNode: SCNNode {
     let width: Float
     let length: Float
-    private let height: Float = 0.52
+    private let height: Float = 0.56
     var topY: Float { position.y + height / 2 }
 
     init(width: Float, length: Float, tint: UIColor) {
@@ -323,29 +352,113 @@ private final class GlassPlatformNode: SCNNode {
         self.length = length
         super.init()
 
-        let base = SCNBox(width: CGFloat(width), height: CGFloat(height), length: CGFloat(length), chamferRadius: 0.18)
-        let material = SCNMaterial()
-        material.lightingModel = .physicallyBased
-        material.diffuse.contents = tint.withAlphaComponent(0.62)
-        material.metalness.contents = 0.05
-        material.roughness.contents = 0.52
-        material.fresnelExponent = 1.25
-        base.materials = [material]
-        addChildNode(SCNNode(geometry: base))
-
-        let cap = SCNBox(width: CGFloat(width * 0.82), height: 0.025, length: CGFloat(length * 0.82), chamferRadius: 0.12)
-        let capMaterial = SCNMaterial()
-        capMaterial.lightingModel = .constant
-        capMaterial.diffuse.contents = UIColor.white.withAlphaComponent(0.06)
-        capMaterial.transparency = 0.14
-        cap.materials = [capMaterial]
-        let capNode = SCNNode(geometry: cap)
-        capNode.position.y = height / 2 + 0.014
-        addChildNode(capNode)
+        addUndercarriage(width: width, length: length)
+        addGlassBody(width: width, length: length, tint: tint)
+        addInsetTop(width: width, length: length)
+        addEdgeLighting(width: width, length: length, tint: tint)
+        addLandingRing(width: width, length: length)
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    private func addUndercarriage(width: Float, length: Float) {
+        let base = SCNBox(width: CGFloat(width * 1.03), height: 0.16, length: CGFloat(length * 1.03), chamferRadius: 0.16)
+        let material = SCNMaterial()
+        material.lightingModel = .physicallyBased
+        material.diffuse.contents = UIColor(red: 0.018, green: 0.025, blue: 0.034, alpha: 1)
+        material.roughness.contents = 0.74
+        material.metalness.contents = 0.18
+        base.materials = [material]
+
+        let node = SCNNode(geometry: base)
+        node.position.y = -height / 2 + 0.06
+        addChildNode(node)
+    }
+
+    private func addGlassBody(width: Float, length: Float, tint: UIColor) {
+        let body = SCNBox(width: CGFloat(width), height: CGFloat(height * 0.76), length: CGFloat(length), chamferRadius: 0.20)
+        let material = SCNMaterial()
+        material.lightingModel = .physicallyBased
+        material.diffuse.contents = tint.withAlphaComponent(0.58)
+        material.metalness.contents = 0.08
+        material.roughness.contents = 0.44
+        material.fresnelExponent = 1.65
+        body.materials = [material]
+
+        let node = SCNNode(geometry: body)
+        node.position.y = -0.02
+        addChildNode(node)
+    }
+
+    private func addInsetTop(width: Float, length: Float) {
+        let cap = SCNBox(width: CGFloat(width * 0.76), height: 0.032, length: CGFloat(length * 0.76), chamferRadius: 0.11)
+        let capMaterial = SCNMaterial()
+        capMaterial.lightingModel = .physicallyBased
+        capMaterial.diffuse.contents = UIColor.white.withAlphaComponent(0.12)
+        capMaterial.roughness.contents = 0.20
+        capMaterial.metalness.contents = 0.02
+        capMaterial.transparency = 0.22
+        cap.materials = [capMaterial]
+
+        let capNode = SCNNode(geometry: cap)
+        capNode.position.y = height / 2 + 0.016
+        addChildNode(capNode)
+    }
+
+    private func addEdgeLighting(width: Float, length: Float, tint: UIColor) {
+        let accent = tint.lightened(by: 0.34)
+        let strips: [(Float, Float, Float, Float)] = [
+            (width * 0.70, 0.035, 0, length * 0.43),
+            (width * 0.70, 0.035, 0, -length * 0.43),
+            (0.035, length * 0.70, width * 0.43, 0),
+            (0.035, length * 0.70, -width * 0.43, 0)
+        ]
+
+        for (stripWidth, stripLength, x, z) in strips {
+            let strip = SCNBox(width: CGFloat(stripWidth), height: 0.018, length: CGFloat(stripLength), chamferRadius: 0.018)
+            let material = SCNMaterial()
+            material.lightingModel = .constant
+            material.diffuse.contents = accent.withAlphaComponent(0.24)
+            material.emission.contents = accent.withAlphaComponent(0.10)
+            strip.materials = [material]
+
+            let node = SCNNode(geometry: strip)
+            node.position = SCNVector3(x, height / 2 + 0.038, z)
+            addChildNode(node)
+        }
+    }
+
+    private func addLandingRing(width: Float, length: Float) {
+        let ringRadius = CGFloat(min(width, length) * 0.20)
+        let ring = SCNTorus(ringRadius: ringRadius, pipeRadius: 0.010)
+        let material = SCNMaterial()
+        material.lightingModel = .constant
+        material.diffuse.contents = UIColor.white.withAlphaComponent(0.16)
+        material.emission.contents = UIColor.white.withAlphaComponent(0.05)
+        ring.materials = [material]
+
+        let node = SCNNode(geometry: ring)
+        node.eulerAngles.x = .pi / 2
+        node.position.y = height / 2 + 0.048
+        addChildNode(node)
+    }
+}
+
+private extension UIColor {
+    func lightened(by amount: CGFloat) -> UIColor {
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        return UIColor(
+            red: min(red + amount, 1),
+            green: min(green + amount, 1),
+            blue: min(blue + amount, 1),
+            alpha: alpha
+        )
     }
 }
 

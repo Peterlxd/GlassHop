@@ -120,7 +120,7 @@ struct ContentView: View {
     private var gameOverOverlay: some View {
         ZStack {
             Color.black.opacity(0.30).ignoresSafeArea()
-            VStack(spacing: 14) {
+            VStack(spacing: 16) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 24, weight: .medium))
                     .foregroundStyle(.white)
@@ -135,14 +135,16 @@ struct ContentView: View {
                     game.restart()
                 } label: {
                     Label("再来一次", systemImage: "arrow.clockwise")
-                        .font(.system(size: 17, weight: .semibold, design: .rounded))
-                        .frame(maxWidth: .infinity, minHeight: 50)
+                        .font(.system(size: 19, weight: .bold, design: .rounded))
+                        .frame(maxWidth: .infinity, minHeight: 66)
+                        .contentShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
                 }
-                .buttonStyle(GlassPrimaryButtonStyle())
+                .buttonStyle(GameOverRetryButtonStyle())
             }
             .foregroundStyle(.white)
-            .frame(width: 272)
-            .padding(24)
+            .frame(maxWidth: 330)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 28)
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(.white.opacity(0.22), lineWidth: 0.8))
             .shadow(color: .black.opacity(0.34), radius: 28, y: 14)
@@ -198,6 +200,18 @@ private struct GlassPrimaryButtonStyle: ButtonStyle {
         }
         .scaleEffect(configuration.isPressed ? 0.97 : 1)
         .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+private struct GameOverRetryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(.white)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).strokeBorder(.white.opacity(0.30), lineWidth: 0.9))
+            .shadow(color: .black.opacity(configuration.isPressed ? 0.10 : 0.24), radius: configuration.isPressed ? 10 : 16, y: configuration.isPressed ? 4 : 8)
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
