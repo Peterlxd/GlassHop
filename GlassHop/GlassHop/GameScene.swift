@@ -72,10 +72,10 @@ final class JumpGameEngine: NSObject, SCNSceneRendererDelegate {
     private var isConfigured = false
 
     private let platformColors = [
-        UIColor(red: 0.06, green: 0.25, blue: 0.28, alpha: 1),
-        UIColor(red: 0.30, green: 0.08, blue: 0.16, alpha: 1),
-        UIColor(red: 0.28, green: 0.17, blue: 0.06, alpha: 1),
-        UIColor(red: 0.12, green: 0.14, blue: 0.32, alpha: 1)
+        UIColor(red: 0.11, green: 0.56, blue: 0.62, alpha: 1),
+        UIColor(red: 0.73, green: 0.22, blue: 0.40, alpha: 1),
+        UIColor(red: 0.72, green: 0.48, blue: 0.18, alpha: 1),
+        UIColor(red: 0.26, green: 0.32, blue: 0.72, alpha: 1)
     ]
 
     func attach(to view: JumpSCNView) {
@@ -279,7 +279,7 @@ final class JumpGameEngine: NSObject, SCNSceneRendererDelegate {
 
     @discardableResult
     private func addPlatform(position: SCNVector3, width: Float, length: Float, colorIndex: Int) -> GlassPlatformNode {
-        let platform = GlassPlatformNode(width: width, length: length, tint: platformColors[colorIndex])
+        let platform = GlassPlatformNode(width: width, length: length, tint: platformColors[colorIndex], style: colorIndex)
         platform.position = position
         world.addChildNode(platform)
         platforms.append(platform)
@@ -347,16 +347,15 @@ private final class GlassPlatformNode: SCNNode {
     private let height: Float = 0.56
     var topY: Float { position.y + height / 2 }
 
-    init(width: Float, length: Float, tint: UIColor) {
+    init(width: Float, length: Float, tint: UIColor, style: Int) {
         self.width = width
         self.length = length
         super.init()
 
         addUndercarriage(width: width, length: length)
-        addGlassBody(width: width, length: length, tint: tint)
-        addInsetTop(width: width, length: length)
-        addEdgeLighting(width: width, length: length, tint: tint)
-        addLandingRing(width: width, length: length)
+        addMainBlock(width: width, length: length, tint: tint)
+        addSoftTop(width: width, length: length, tint: tint)
+        addStyleDetail(width: width, length: length, tint: tint, style: style)
     }
 
     required init?(coder: NSCoder) {
@@ -364,85 +363,102 @@ private final class GlassPlatformNode: SCNNode {
     }
 
     private func addUndercarriage(width: Float, length: Float) {
-        let base = SCNBox(width: CGFloat(width * 1.03), height: 0.16, length: CGFloat(length * 1.03), chamferRadius: 0.16)
+        let base = SCNBox(width: CGFloat(width * 0.98), height: 0.18, length: CGFloat(length * 0.98), chamferRadius: 0.14)
         let material = SCNMaterial()
         material.lightingModel = .physicallyBased
-        material.diffuse.contents = UIColor(red: 0.018, green: 0.025, blue: 0.034, alpha: 1)
-        material.roughness.contents = 0.74
-        material.metalness.contents = 0.18
+        material.diffuse.contents = UIColor(red: 0.020, green: 0.027, blue: 0.035, alpha: 1)
+        material.roughness.contents = 0.78
+        material.metalness.contents = 0.06
         base.materials = [material]
 
         let node = SCNNode(geometry: base)
-        node.position.y = -height / 2 + 0.06
+        node.position.y = -height / 2 + 0.04
         addChildNode(node)
     }
 
-    private func addGlassBody(width: Float, length: Float, tint: UIColor) {
-        let body = SCNBox(width: CGFloat(width), height: CGFloat(height * 0.76), length: CGFloat(length), chamferRadius: 0.20)
+    private func addMainBlock(width: Float, length: Float, tint: UIColor) {
+        let body = SCNBox(width: CGFloat(width), height: CGFloat(height * 0.86), length: CGFloat(length), chamferRadius: 0.22)
         let material = SCNMaterial()
         material.lightingModel = .physicallyBased
-        material.diffuse.contents = tint.withAlphaComponent(0.58)
-        material.metalness.contents = 0.08
-        material.roughness.contents = 0.44
-        material.fresnelExponent = 1.65
+        material.diffuse.contents = tint.withAlphaComponent(0.88)
+        material.metalness.contents = 0.03
+        material.roughness.contents = 0.38
+        material.fresnelExponent = 1.20
         body.materials = [material]
 
         let node = SCNNode(geometry: body)
-        node.position.y = -0.02
+        node.position.y = 0
         addChildNode(node)
     }
 
-    private func addInsetTop(width: Float, length: Float) {
-        let cap = SCNBox(width: CGFloat(width * 0.76), height: 0.032, length: CGFloat(length * 0.76), chamferRadius: 0.11)
+    private func addSoftTop(width: Float, length: Float, tint: UIColor) {
+        let cap = SCNBox(width: CGFloat(width * 0.78), height: 0.035, length: CGFloat(length * 0.78), chamferRadius: 0.12)
         let capMaterial = SCNMaterial()
         capMaterial.lightingModel = .physicallyBased
-        capMaterial.diffuse.contents = UIColor.white.withAlphaComponent(0.12)
-        capMaterial.roughness.contents = 0.20
-        capMaterial.metalness.contents = 0.02
-        capMaterial.transparency = 0.22
+        capMaterial.diffuse.contents = tint.lightened(by: 0.16).withAlphaComponent(0.72)
+        capMaterial.roughness.contents = 0.26
+        capMaterial.metalness.contents = 0.01
         cap.materials = [capMaterial]
 
         let capNode = SCNNode(geometry: cap)
-        capNode.position.y = height / 2 + 0.016
+        capNode.position.y = height / 2 + 0.012
         addChildNode(capNode)
     }
 
-    private func addEdgeLighting(width: Float, length: Float, tint: UIColor) {
-        let accent = tint.lightened(by: 0.34)
-        let strips: [(Float, Float, Float, Float)] = [
-            (width * 0.70, 0.035, 0, length * 0.43),
-            (width * 0.70, 0.035, 0, -length * 0.43),
-            (0.035, length * 0.70, width * 0.43, 0),
-            (0.035, length * 0.70, -width * 0.43, 0)
-        ]
-
-        for (stripWidth, stripLength, x, z) in strips {
-            let strip = SCNBox(width: CGFloat(stripWidth), height: 0.018, length: CGFloat(stripLength), chamferRadius: 0.018)
-            let material = SCNMaterial()
-            material.lightingModel = .constant
-            material.diffuse.contents = accent.withAlphaComponent(0.24)
-            material.emission.contents = accent.withAlphaComponent(0.10)
-            strip.materials = [material]
-
-            let node = SCNNode(geometry: strip)
-            node.position = SCNVector3(x, height / 2 + 0.038, z)
-            addChildNode(node)
+    private func addStyleDetail(width: Float, length: Float, tint: UIColor, style: Int) {
+        switch style % 4 {
+        case 0:
+            addCenterTile(width: width, length: length, tint: tint.darkened(by: 0.10))
+        case 1:
+            addRaisedPuck(width: width, length: length, tint: tint.lightened(by: 0.12))
+        case 2:
+            addStackedInset(width: width, length: length, tint: tint.darkened(by: 0.08))
+        default:
+            addCornerButton(width: width, length: length, tint: tint.lightened(by: 0.10))
         }
     }
 
-    private func addLandingRing(width: Float, length: Float) {
-        let ringRadius = CGFloat(min(width, length) * 0.20)
-        let ring = SCNTorus(ringRadius: ringRadius, pipeRadius: 0.010)
-        let material = SCNMaterial()
-        material.lightingModel = .constant
-        material.diffuse.contents = UIColor.white.withAlphaComponent(0.16)
-        material.emission.contents = UIColor.white.withAlphaComponent(0.05)
-        ring.materials = [material]
-
-        let node = SCNNode(geometry: ring)
-        node.eulerAngles.x = .pi / 2
-        node.position.y = height / 2 + 0.048
+    private func addCenterTile(width: Float, length: Float, tint: UIColor) {
+        let tile = SCNBox(width: CGFloat(width * 0.44), height: 0.045, length: CGFloat(length * 0.44), chamferRadius: 0.08)
+        tile.materials = [platformMaterial(color: tint.withAlphaComponent(0.70), roughness: 0.34)]
+        let node = SCNNode(geometry: tile)
+        node.position.y = height / 2 + 0.044
         addChildNode(node)
+    }
+
+    private func addRaisedPuck(width: Float, length: Float, tint: UIColor) {
+        let puck = SCNCylinder(radius: CGFloat(min(width, length) * 0.18), height: 0.065)
+        puck.radialSegmentCount = 36
+        puck.materials = [platformMaterial(color: tint.withAlphaComponent(0.76), roughness: 0.30)]
+        let node = SCNNode(geometry: puck)
+        node.position.y = height / 2 + 0.058
+        addChildNode(node)
+    }
+
+    private func addStackedInset(width: Float, length: Float, tint: UIColor) {
+        let slab = SCNBox(width: CGFloat(width * 0.62), height: 0.055, length: CGFloat(length * 0.50), chamferRadius: 0.09)
+        slab.materials = [platformMaterial(color: tint.withAlphaComponent(0.74), roughness: 0.36)]
+        let node = SCNNode(geometry: slab)
+        node.position = SCNVector3(0, height / 2 + 0.052, 0)
+        addChildNode(node)
+    }
+
+    private func addCornerButton(width: Float, length: Float, tint: UIColor) {
+        let button = SCNBox(width: CGFloat(width * 0.28), height: 0.060, length: CGFloat(length * 0.28), chamferRadius: 0.07)
+        button.materials = [platformMaterial(color: tint.withAlphaComponent(0.76), roughness: 0.32)]
+        let node = SCNNode(geometry: button)
+        node.position = SCNVector3(width * 0.18, height / 2 + 0.055, -length * 0.18)
+        addChildNode(node)
+    }
+
+    private func platformMaterial(color: UIColor, roughness: CGFloat) -> SCNMaterial {
+        let material = SCNMaterial()
+        material.lightingModel = .physicallyBased
+        material.diffuse.contents = color
+        material.roughness.contents = roughness
+        material.metalness.contents = 0.02
+        material.fresnelExponent = 1.15
+        return material
     }
 }
 
@@ -457,6 +473,20 @@ private extension UIColor {
             red: min(red + amount, 1),
             green: min(green + amount, 1),
             blue: min(blue + amount, 1),
+            alpha: alpha
+        )
+    }
+
+    func darkened(by amount: CGFloat) -> UIColor {
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        return UIColor(
+            red: max(red - amount, 0),
+            green: max(green - amount, 0),
+            blue: max(blue - amount, 0),
             alpha: alpha
         )
     }
